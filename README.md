@@ -12,9 +12,9 @@ The datasets were divided into train and test sets as per the requirement for th
 This report consists of the following parts:
 The overview section describes the dataset and summarizes the goal of the project and key steps that were performed; Methods section explains the process and techniques used, including data cleaning, data exploration and visualization, insights gained, and modeling approach for each of the performed analysis, followed by the Results section, subsequent to each analysis, that presents the modeling results and discusses the model performance for the Linear Model and Factorization Model; Finally, the Conclusion section provides a summary of the report, the limitations and future research.
 Key findings:
-There are 10 key findings on the future of higher education in Dubai, outlined in the [colclusion](#conclusion) 
+There are 10 key findings on the future of higher education in Dubai, outlined in the [colclusion] part of the PDF report (PredictiveModel.pdf). 
 
 Files attached to this report:
-* *RMD script*
-* *R script*
+* *RMD script*(PredictiveModel.Rmd)
+* *R script*(PredictiveModel.R)
 
