@@ -1,0 +1,1894 @@
+---
+title: "Understanding the Future of Higher Ed Landscape in Dubai"
+author: "Klim Popov"
+mainfont: DejaVu Sans
+date: "23 May, 2020"
+output:
+  pdf_document:
+    fig_caption: yes 
+    includes:
+      in_header: "preamble.tex"
+    number_sections: true
+    latex_engine: xelatex
+linkcolor: blue
+---
+```{r setupeverything, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+```
+
+# Abstract
+
+The market for higher education institutions in the UAE is fearce. Due to to the recent pandemic of COVID-19, many institutions are expected to partly open their educational programs online, which expected to result in overcrowding the market with educational programs supply. 
+
+In this project we will discuss several tools to support university decisions on actions required to be taken amid the aftermath of the pandemic.  
+
+This project aims to discover the current landscape of Higher Ed in Dubai and analyze several forecast models to support decision making processes in the universities. 
+
+The project includes analysis on three groups of collected data: from government entity (KHDA census), Google Reviews and Google Trends. The first dataset analysis will include Linear Model, Quantile Regression Model, Random Forest Model. The second dataset will include Factorization Model and Sentiment Analysis. The last dataset will include time-series analysis and trend prediction with Holt-Winters. 
+
+The datasets were divided into train and test sets as per the requirement for this project. 
+
+This report consists of the following parts:
+The overview section describes the dataset and summarizes the goal of the project and key steps that were performed; Methods section explains the process and techniques used, including data cleaning, data exploration and visualization, insights gained, and modeling approach for each of the performed analysis, followed by the Results section, subsequent to each analysis, that presents the modeling results and discusses the model performance for the Linear Model and Factorization Model; Finally, the Conclusion section provides a summary of the report, the limitations and future research.
+
+Key findings:
+There are 10 key findings on the future of higher education in Dubai, outlined in the [colclusion](#conclusion) 
+
+Files attached to this report:
+
+* *RMD script*
+* *R script*
+
+
+\newpage
+\tableofcontents
+
+\newpage
+
+
+
+
+# Overview of the project
+
+## Project Requirements
+
+**Submission Files:**
+
+The project requires PDF report, report in Rmd format and an R script  
+
+**Report Structure and Content:**
+The report documents the analysis and presents the findings, along with supporting statistics and figures. The following thorough explanation or justification for various steps of your project needs to be provided: why a specific train/test split (e.g. 50/50 vs 90/10) or algorithm was used. The report must be written in English and include at least the following sections:
+
+* An introduction/overview/executive summary section that describes the dataset and variables, and summarizes the goal of the project and key steps that were performed.
+
+* A methods/analysis section that explains the process and techniques used, including data cleaning, data exploration and visualization, any insights gained, and your modeling approach. At least two different models or algorithms must be used, with at least one being more advanced than simple linear regression for prediction problems.
+
+* A results section that presents the modeling results and discusses the model performance.
+
+* A conclusion section that gives a brief summary of the report, its potential impact, its limitations, and future work.
+
+**Code Requirements:**
+The code in the R script should run without errors and should be well-commented and easy to follow. It should also use relative file paths and automatically install missing packages. The dataset you use should either be automatically downloaded by the code or provided in the GitHub repo:
+
+* Code runs easily, is easy to follow, is consistent with the report, and is well-commented. All file paths are relative and missing packages are automatically installed with *if(!require)* statements.
+
+## Overview of used resources
+
+The specifications of the R Studio session and libraries used in the report can be found [here](#session-info). In this project, we utilized R Server run on Google Cloud Platform. All file paths associated with the project are relative and missing packages are automatically installed with *if(!require)* statements. The packages are loaded through *Pacman* library in order to install only the packages which are not present on the machine, which runs the R/RMD script. It is possible to run both scripts to review the datasets and results. The functionality was tested with 2 independent machines.  
+
+```{r InitialSetup, include=FALSE}
+#Install Pacman to check which libraries are missing and only install the missing ones
+if (!require("pacman")) install.packages("pacman", repos = "http://cran.us.r-project.org")
+pacman::p_load(readr,         # used to read downloaded csv files     
+               tidyverse,     # Includes dplyr, ggplot2, and others
+               caret,         # used for rating model 
+               data.table,    # for working with datagrames and matricies     
+               kableExtra,    # for table formatting
+               knitr,         # to keep it knit :)
+               tidyr,         # to keep it tidy
+               dataPreparation, # used to clean the review dataset
+               gtrendsR,      # used to gather google trends data
+               reshape2,      # used to present google trends data
+               forecast,      # used for time-series models
+               highcharter,   # to work with display of timeseries
+               webshot,       # saving heavy js/HTML to images for the report to be run smoothly
+               GGally,        # creation of correlogram
+               CatEncoders,   # Used for the label encoding/replacing categorical variable by numeric values
+               randomForest,  # randomForest model
+               randomForestExplainer, #Explainer for RF
+               quantreg,      # Quantile Regression Model
+               svglite,       # Take it easy on space for svg files 
+               skimr,         # Provide summary stats 
+               pander,        # for session info 
+               recosystem,    # for factorization model     
+               gridExtra,     # display plots in grid
+               wordcloud,     # for word cloud
+               syuzhet,       # for sentiment analysis
+               tidytext,      # for sentiment
+               tm)            # for sentiment corpus
+
+
+# Ensure phantomJS is installed successfully with webshot package - it had problem on my machine
+if (is_phantomjs_installed() != TRUE) webshot::install_phantomjs()
+
+#installation of TinyTeX in R (was required on the first attemp to create PDF: tinytex::install_tinytex()
+if (tinytex:::is_tinytex()!= TRUE) tinytex::install_tinytex()
+
+#Downloading Data
+download.file("https://github.com/klim-hb/diy-project/raw/master/data.zip", "data.zip")
+unzip("data.zip", junkpaths=TRUE)
+
+```
+\newpage
+
+## Data Collection and Overview
+
+The data collection sections describes 3 groups of sources for this project. The collected data was uploaded on [github](https://github.com/klim-hb/diy-project/raw/master/data.zip) and corresponds to the following sections of our report:
+
+- KHDA data: files *HigherEdData.csv*, *Unis-names.csv* - census of universities located in Dubai and licensed by the KHDA; 
+- Google Maps data: files *googleUnis.csv* and *reviews.csv* - information about Google profiles of the universities in Dubai and their reviews, was gathered through independent scraper for Google Reviews *outScrapper*, as it was not possible to gather the information through R directly due to limitations of JAVA installed on the machine;
+- Google Trends data: historical data in form of timeseries for crawled keywords, via *gtrendsR* package.
+
+####  University Census Set
+
+The data was initially collected from an official source - Knowledge and Human Development Authority of Dubai with their annual census of institutions in Dubai. We have added information on rankings from the same portal which was not present in the original file. 
+
+While we specified the range from 2013 to 2019, for several institutions the census was not completed or completed partly. This provides a very big limitation for our analysis. 
+
+Ranking, curriculum, years in Dubai information was gathered from KHDA website, while ranking was adjusted to represent most popular (1-UK, US, Australia), Arab and European curriuclum (2-UAE, EU), and Asian curriculum (3 - India, Pakistan, non-GCC countries)
+
+```{r KHDAData, include=FALSE}
+#Unzipping required files for the first model
+# unzip("data.zip", "HigherEdData.csv")
+# unzip("data.zip", "Unis-names.csv")
+
+# Reading the "HigherEdData.csv"
+HigherEdData <- read.csv("HigherEdData.csv")
+
+# Reading the "Unis-names.csv"
+Unis_names <- read.csv("Unis-names.csv")
+
+```
+
+**HigherEdData and Unis_names Sets**
+
+**HigherEdData** is structured as data frame with 1882 observation and 9 variables, **Unis_names** consists of 36 observations and 6 variables. The composition of the variables:
+
+\
+
+```{r HigherEdDataOvw, include=TRUE, echo=FALSE}
+#create and display table with names of variables and comments
+text_tbl1 <- data.frame(
+  Name = c(names(HigherEdData),names(Unis_names)),
+  Comment = c("Year of census collected","University Name","Location","Lattitude of location","Longtitude of location","Major or specialization of students in census","Undergraduate or Postgraduate Students","Enrolled or Graduated","Number of students in the census", "University Id","Name of the University","Avarege Tuition Fees","Ranking of the university as of 2019","Rating of the curriculum depending on the country of origin","Number of years operating in Dubai"),
+  Dataset = c("HigherEdData","HigherEdData","HigherEdData","HigherEdData","HigherEdData","HigherEdData","HigherEdData","HigherEdData","HigherEdData","Unis-names","Unis-names","Unis-names","Unis-names","Unis-names","Unis-names"))
+
+kable(text_tbl1, caption = "Overview of variables in HigherEdData and Unis-names") %>%
+  kable_styling(position = "center",
+                font_size = 7,
+                full_width = FALSE, latex_options = "hold_position") %>%
+  column_spec(1, bold =T) %>%
+  column_spec(2, bold=F, width = "25em") %>%
+  row_spec(0, bold = T, color = "white", background = "#D7261E")
+
+```
+
+\
+
+The data in both datasets appears to be not tidy enough to start our analysis. The below first six records from the dataset demonstrate that the data structure needs to be changed: 
+
+\
+
+```{r headHEDAta, include=TRUE, echo=FALSE}
+#show head of HigherEdData data
+HigherEdData  %>%
+head()  %>%
+kable(caption = "First six records of HigherEdData") %>%
+  kable_styling(full_width = F, position = "center",
+                font_size = 7, latex_options = "hold_position") %>%
+  column_spec(1, bold = T) %>%
+  column_spec(2, bold=F, width = "7em") %>%
+  column_spec(5:6, bold=F, width = "5em") %>%  
+  row_spec(0, bold = T, color = "white", background = "#D7261E")
+
+```
+
+\
+
+Especially, for the following observations in the first dataset:
+
+* Not required data: Lat and Long
+* Students presented as summative data. This will limit our model for analysis. There is no clear display of new, concurrent, withdrawals, transfers to make the sense of the data, therefore, only total enrolled numbers will be used 
+* No ID assigned to any of the entities
+* Dataset has information on Graduated students - not the focus of our study
+
+And the second dataset:
+
+\
+
+```{r headUNamesDAta, include=TRUE, echo=FALSE}
+#show head of Unis_names data
+Unis_names  %>%
+head()  %>%
+kable(caption = "First six records of Unisnames") %>%
+  kable_styling(full_width = F, position = "center",
+                font_size = 7, latex_options = "hold_position") %>%
+  row_spec(0, bold = T, color = "white", background = "#D7261E")
+
+```
+
+\
+
+Especially, for the following observations in the second dataset:
+
+* No ID assigned to any of the entities 
+* The name of the university most likley to correspond to subsequent names in the first dataset. 
+
+Hence, prior to starting any analysis of the data, the dataset must be put in order. 
+
+
+#### University Review Data - Google Maps 
+
+The datasets **googleUni** and **review** provide information about Google profiles of the universities in Dubai and their reviews; the data was gathered through independent scraper for Google Reviews *outScrapper*. Prior to sharing the datasets, the respective names of google users who have rated the universities were deleted and anonymized. 
+
+```{r GoogleData, include=FALSE}
+#Unzipping required files for the first model
+# unzip("data.zip", "googleUni.csv")
+# unzip("data.zip", "review.csv")
+
+# Reading the "googleUni.csv"
+GUni <- read.csv("googleUni.csv")
+
+# Reading the "reviews.csv"
+GReviews <- read.csv("reviews.csv")
+
+```
+
+
+**GoogleUni and Review Sets**
+
+**GUni** is structured as data frame with 77 observation and 6 variables, **GReviews** consists of 3525 observations and 5 variables. The composition of the variables is presented in the overview table.
+
+\
+
+```{r GoogleDataOvw, include=TRUE, echo=FALSE}
+#create and display table with names of variables and comments
+text_tbl2 <- data.frame(
+  Name = c(names(GUni),names(GReviews)),
+  Comment = c("Name of the University","Latitude of the location","Longtitude of the location","Total number of reviews","Total number of photos assosiated with the reviews","Google Id of the university","Google Id of the university","Author Id of the review","Total score for rating (integer)","Timestamp in EPOCH format (seconds since Jan 1, 1970)","Text of the review, translated text of the review"),
+  Dataset = c("GUni","GUni","GUni","GUni","GUni","GUni","GReviews","GReviews","GReviews","GReviews","GReviews"))
+
+kable(text_tbl2, caption = "Overview of Guni and GReviews") %>%
+  kable_styling(position = "center",
+                font_size = 7,
+                full_width = FALSE, latex_options = "hold_position") %>%
+  column_spec(1, bold =T) %>%
+  column_spec(2, bold=F, width = "30em") %>%
+  row_spec(0, bold = T, color = "white", background = "#D7261E")
+
+```
+
+\
+
+The data in both datasets appears to be not tidy enough to start our analysis. The below first six records from the dataset demonstrate that the data structure needs to be changed.  
+\
+
+```{r headGUDAta, include=TRUE, echo=FALSE}
+#show head of GUni data
+GUni  %>%
+head()  %>%
+kable(caption = "First six records of GUni") %>%
+  kable_styling(full_width = F, position = "center",
+                font_size = 5, latex_options = "hold_position") %>%
+    column_spec(1, bold=F, width = "15em") %>%  
+    row_spec(0, bold = T, color = "white", background = "#D7261E")
+
+```
+
+\
+
+Especially, for the following observations in the first dataset:
+
+* Not required data: Lat and Long
+* Google ID is very complex
+
+And the second dataset:
+
+\
+
+```{r headGUNamesData, include=TRUE, echo=FALSE}
+#show head of GReviews data
+GReviews  %>%
+head()  %>%
+kable(caption = "First six records of GReviews") %>%
+  kable_styling(full_width = F, position = "center",
+                font_size = 4, latex_options = "hold_position") %>%
+   column_spec(5, bold=F, width = "35em") %>%  
+   row_spec(0, bold = T, color = "white", background = "#D7261E")
+
+```
+
+\
+
+Especially, for the following observations in the second dataset:
+
+* Google ID is very complex
+* Author Id desplayed as complex number, not character
+* EPOCH format of data
+
+Hence, prior to starting any analysis of the data, the dataset must be put in order. 
+
+#### Trends Data  - Google Trends
+
+Google Trends data was collected from 2004 to 2020 for the following keywords and regions:
+
+- Worldwide: university in Dubai
+- UAE: bachelors in Dubai
+- UAE: online bachelors in Dubai
+- UAE: masters in Dubai
+- UAE: online masters in Dubai
+
+Google Trends data is only avaliable in relative figures - 0 to 100 on a scale, where 100 represents the biggest interest in the keyword through Google search. 
+
+**Google Trends Data**
+
+The composition of Google Trends Data is discussed in the respective [section](#google-trends-forecasting).
+
+By default, the world data has 197 observations with 2 variables.
+
+\newpage
+## Steps of this project
+
+In order to have a somewhat accurate representative opinion on education landscape in Dubai for the future, we require to analyse 3 groups of data. The project consists of the following sections for analysis of provided datasets:
+
+**Universities Census Analysis**
+
+1. We will analyze the provided data 
+2. We will preprocess the provided data and split the database into 2 parts: train and test with a precise explanation on the ratio
+3. We will explore several methods for our models and compare RMSE & MAPE values: 
+  + Muliple Linear Regression,
+  + Quantile Regression Model and
+  + Random Forest Model
+4. We will record and analyze the results 
+5. We will conclude the discussion on the methods used with observed limitations in the joint [results section](#results)
+
+
+**Google Maps Reviews Analysis**
+
+1. We will analyze the provided data 
+2. We will preprocess the provided data and split the database into 2 parts: train and test with a precise explanation on the ratio
+3. We will explore the following method for our model and compare RMSE values: 
+  + Factorization Model (via recosystem),
+  + Ensamble Model,
+  + Sentiment Analysis
+4. We will record and analyze the results 
+5. We will conclude the discussion on the methods used with observed limitations in the joint [results section](#results)
+
+**Google Trends Analysis**
+
+1. We will analyze the provided data 
+2. We will ensure that the data is provided in time-series format for our analysis
+3. We will explore the following method for our model: 
+  + Holt-Winters method (via forecast) 
+4. We will record and analyze the results 
+5. We will conclude the discussion on the methods used with observed limitations in the joint [results section](#results)
+
+
+\newpage
+
+# Universities Census Analysis
+
+## Preprocessing the data
+
+#### Cleaning the data
+
+First, we would prefer to assign appropriate names for the columns in both datasets and join the datasets by respective name of the university. 
+
+Then, due to the fact, that we do not have all the required information on student numbers (drops, transfers, new enrollments), we can only consider information of total enrolled students in a particular year. 
+
+Lastly, we wil apply *Label Encoder* to represent the categorical data.
+
+The summary of the updated dataset *HigherEdData* is presented as follows: 
+
+\
+
+```{r NewIDs, include=TRUE, echo=FALSE}
+
+# Getting the column names of the HigherEdData.csv file
+#colnames(HigherEdData)
+# Chnaging the column names by index
+colnames(HigherEdData)[1] = "Year" 
+colnames(HigherEdData)[2] = "University_Name"
+
+# Getting the column names for Unis_names file
+#colnames(Unis_names)
+# Chnaging the column names by index
+colnames(Unis_names)[2] = "University_Name"
+colnames(Unis_names)[3] = "Avarage_Tuition_Fee"
+colnames(Unis_names)[4] = "Ranking"
+colnames(Unis_names)[5] = "Curriculum_Rating"
+
+# Merging both files by the University_Name column
+HigherEdData <- merge(HigherEdData,Unis_names,by="University_Name")
+
+# Viewing the updated dataframe 
+# View(HigherEdData)
+
+# Getting the unique values of the Status column
+#unique(HigherEdData$Status)
+
+# Dropping the rows if status column contains Graduated
+HigherEdData<-HigherEdData[!(HigherEdData$Status=="Graduated"),]
+
+# Applying the Label Encoder of each catefogrical column
+University_Name = LabelEncoder.fit(HigherEdData$University_Name)
+HigherEdData$University_Name = transform(University_Name,HigherEdData$University_Name)
+Major = LabelEncoder.fit(HigherEdData$Major)
+HigherEdData$Major = transform(Major,HigherEdData$Major)
+Level = LabelEncoder.fit(HigherEdData$Level)
+HigherEdData$Level = transform(Level,HigherEdData$Level)
+
+skim(HigherEdData) %>% focus(n_missing, numeric.p0, numeric.mean, numeric.sd, numeric.p100, numeric.hist) %>%
+kable(caption = "Summary of HigherEdData") %>%
+kable_styling(full_width = F, position = "center",
+                font_size = 9, latex_options = "hold_position") 
+#%>% column_spec(5, bold=F, width = "35em") %>%  
+#   row_spec(0, bold = T, color = "white", background = "#D7261E")
+
+```
+
+\
+
+The data looks clean to proceed with the next step.
+
+## Data Exploration
+
+We will start the data exploration by looking at the distribution of Universities ranking. We can see that Universities with ID 11 to 30 are rated below 4 on avarage.
+
+\
+
+```{r Heatmap, fig.width=5, fig.height=4, include=TRUE, echo=FALSE, message=FALSE, fig.align="center", fig.cap="Distribution of Universities Rankings"}
+
+HigherEdData %>% 
+  ggplot(aes(University_Name, Ranking)) +
+  geom_point() +
+  geom_smooth()
+```
+
+\
+
+Distribution of students over the years also varies from university to university
+
+\
+
+```{r DataExplor1, fig.width=6, fig.height=4, include=TRUE, echo=FALSE, message=FALSE, fig.align="center", fig.cap="Distribution of Students in Universities over the years"}
+
+#graph students by university over the years
+HigherEdData %>%  ggplot(aes(University_Name, Students, color=Year)) +
+ geom_point(stat="identity") + 
+ggtitle("Total Student records in all universities over the years") + 
+  geom_smooth()
+
+```
+
+\
+
+The above plot provides summarized statistics by date. We can see several universities, where the data is not recorded for some of the years. Some universities increase their numbers over the years, some - decrease. The avarage is also displayed, it almost repeats the ranking avarage.  
+
+We will now explore correlation between the avaliable data variables. We will only select those variable which show correlation different from 0. 
+
+\
+
+```{r DataExplor8, fig.width=20, fig.height=20, include=FALSE, echo=FALSE, message=FALSE, fig.align="center"}
+## correlogram for Higher Ed Data saved as png to make pdf lighter:
+svglite("myPlot.svg", height = 20, width = 20)
+tmp <- HigherEdData %>% select(Location,University_Name,Major,Level,Students,Avarage_Tuition_Fee,Ranking,Curriculum_Rating,YearsinDubai) %>% ggpairs(title="Correlogram for HigherEd data with highlighted difference on Location", ggplot2::aes(colour=Location)) 
+print(tmp)
+dev.off()
+
+## saving svg to png as screenshot
+webshot::webshot(url="myPlot.svg",file="myplot.png",vwidth=1200,vheight = 1200)
+
+
+```
+![Correlogram for HigherEd data with highlighted difference on Location](myplot.png)
+
+
+Scatterplots of each pair of numeric variable are drawn on the left part of the figure. Pearson correlation is displayed on the right. Variable distribution is available on the diagonal.
+
+Tuition Fees are highly correlated with Ranking. The higher the avarage of the tuition fees, the better the ranking of the university.  Ranking has negative correlation with Curriculum Rating (explained by difference in scales).
+
+Years in Dubai variable appears to be insignificant, as well as it is not possible to see direct link between number of enrolled students and other variables. Major and Level of studies are also considered to have low impact on other variables. 
+
+The distributuin of location shows prevealing DIAC and very small index for DIFC. The oldest universities are located in Knowledge Village, and the youngest - in DIFC. 
+
+In general, the avaliable dataset does not provide much of an insights, as discribed in the limitations, however it might be helpful to review several models to predict the number of students in those universities. 
+
+It appears that there is no significant correlation between our variables. While for other variables it demonstrates complete autonomy, real Sessions are somewhat corelated with Duration of the sessions (+0.51). This index is still to low to conclude that they are inter-dependent. In reality, each session could be long and short, the correlation appears to be a pattern, but most likely just due to noisy data. 
+
+It will be very difficult for our model to predict the values, as there is no significant pattern detected. However, we will test each model with train and test sets and validate the final model with a portion of exsisting data to explore this. 
+
+
+## Data Split
+
+```{r DataEDSplit, include=TRUE, echo=FALSE, message=FALSE, fig.align="center"}
+# Dividing the dataset into the train and test
+smp_size <- floor(0.8 * nrow(HigherEdData))
+train_ind <- sample(seq_len(nrow(HigherEdData)), size = smp_size)
+train <- HigherEdData[train_ind, ]
+test <- HigherEdData[-train_ind, ]
+
+```
+
+We will split our data into train and test sets for our linear the models. We will apply the following ratios for splitting the data:
+
+The final model would need to make the prediction and depending on how far off it is from the actual numbers would allow us to make a choice. We will divide into 80% and 20% as general practise in Data Science and recommendation of creaters of [dataPreparation package](https://cran.r-project.org/web/packages/dataPreparation/vignettes/train_test_prep.html). During the production of the project, sets of 70/75/80/85/90 were tried and based on the desirable outcomes value (lower RMSE,MAPE), the selection was made for 80% split.  
+
+* Train set: 80%
+* Test set: 20%
+
+
+## Modeling Methods
+We will utilize and compare several methods/models in our research. Below overview would help us understand some theoretic background of the models.
+
+#### RMSE and MAPE
+In this project, we used RMSE (Root Mean Squared Error) function described in the [textbook](https://rafalab.github.io/dsbook/large-datasets.html#netflix-loss-function). 
+
+> In this section, we describe how the general approach to defining “best” in machine learning is to define a loss function, which can be applied to both categorical and continuous data.The most commonly used loss function is the squared loss function...The Netflix challenge used the typical error loss: they decided on a winner based on the residual mean squared error (RMSE) on a test set...
+
+We calculate RMSE as the formula below:
+
+
+ $$\mbox{RMSE} = \sqrt{\frac{1}{n}\sum_{t=1}^{n}e_t^2}$$
+
+And MAPE (Mean absolute percentage error) as follows:
+
+ $$\mbox{MAPE} = \frac{100\%}{n}\sum_{t=1}^{n}\left|\frac{e_t}{y_t}\right|$$
+
+#### Linear Model
+
+This linear model take sinto account all avaliable variables and possible user biases. This model can be described mathematically as:
+
+$$Y_{u,i} = \mu + b_i + b_u + \varepsilon_{u,i}$$
+
+We will calculate RMSE and MAPE for this model to determine its' accuracy. We will not perform regularization for this model, as the nature of the dataset does not allow us to that. However, in our calculation of RMSE we will use log instead of actual values - to ensure the RMSE value is as small as intented. 
+
+#### Quantile Linear Regression Model
+
+>Quantile regression is a type of regression analysis used in statistics and econometrics. Whereas the method of least squares estimates the conditional mean of the response variable across values of the predictor variables, quantile regression estimates the conditional median (or other quantiles) of the response variable. Quantile regression is an extension of linear regression used when the conditions of linear regression are not met.
+
+>The function computes an estimate on the tau-th conditional quantile function of the response, given the covariates, as specified by the formula argument. Like lm(), the function presumes a linear specification for the quantile regression model, i.e. that the formula defines a model that is linear in parameters. For non-linear quantile regression see the package nlrq(). The function minimizes a weighted sum of absolute residuals that can be formulated as a linear programming problem. As noted above, there are three different algorithms that can be chosen depending on problem size and other characteristics. For moderate sized problems (n << 5,000, p << 20) it is recommended that the default "br" method be used. There are several choices of methods for computing confidence intervals and associated test statistics. See the documentation for summary.rq for further details and options.
+
+
+
+
+#### Random Forest Model
+
+Random forests are a very popular machine learning approach that addresses the shortcomings of decision trees using a clever idea. The goal is to improve prediction performance and reduce instability by averaging multiple decision trees (a forest of trees constructed with randomness). It has two features that help accomplish this. The Random Forests described in the [textbook](https://rafalab.github.io/dsbook/examples-of-algorithms.html#random-forests) using *library(randomForest)*. We will use the same library to perfom the operations. 
+
+
+## Universities Census Analysis Results
+
+### Multiple Linear Regression Model
+
+As discussed in methods, we would like to account for all possible biases in the student numbers and see how accurate our prediction could be.
+
+The naive avarage for our dataset is  
+
+```{r Results1M1, include=TRUE, echo=FALSE}
+
+print(paste('Naive avarage:',mean(train$Students)))
+print(paste('Avarage with log1p:',log1p(mean(train$Students))))
+
+```
+
+After applying linear model function *lm()* we have received the following results: 
+
+```{r Results1M11, include=TRUE, echo=TRUE}
+# Applying Muliple Linear Regression
+regressor = lm(Students ~ Year+University_Name+Major+Level+
+                 Ranking+Avarage_Tuition_Fee+Curriculum_Rating+
+                 YearsinDubai,data = train)
+
+# Cearting the input test dataframe for testing the model for the prediction.
+x_test = test[, c("Year","University_Name","Major","Level",
+                  "Avarage_Tuition_Fee","Ranking","Curriculum_Rating","YearsinDubai")]
+
+# Actual output of the Testing column
+y_test = test$"Students"
+
+# Applying the prediction of the regression model on the test dataframe.
+y_pred = predict(regressor, newdata = x_test)
+
+# Getting the absolute if there is any negitive value.
+y_pred = abs(y_pred)
+
+# Combining the Predicted Values and Actual Values into one dataframe.
+actuals_preds <- data.frame(cbind(actuals=y_test, predicteds=y_pred)) 
+
+# Computing the RMSE.
+rmse <- sqrt(mean(as.matrix(log1p(y_test) - log1p(y_pred))^2))
+print(paste('RMSE:', rmse))
+
+# MeanAbsolutePercentageError (MAPE)
+mape <- mean(abs((y_pred - y_test))/y_test)
+print(paste('MAPE:',mape))
+```
+
+
+We can see that RMSE value is quite high even after adjusting the values as matrix and log. 
+
+We shall try to optimize these values with the next model.
+
+
+### Quantile Linear Regression Model
+
+Thq Quantile Linear Regression Model uses $\tau$ value = 0.25. We received the following results:
+
+\
+
+```{r Results1M2, include=TRUE, echo=FALSE, fig.cap="Predict vs Actuals for Quantile Linear Reg Model", fig.width=4}
+# Applying the Quantile Regression Model
+model1 = rq(Students ~ Year+University_Name+Major+Level+Ranking+Avarage_Tuition_Fee+Curriculum_Rating+YearsinDubai,
+            data = train,tau = 0.25)
+y_pred = predict(model1, newdata = x_test)
+y_pred = abs(y_pred)
+
+# Combining the Predicted Values and Actual Values into one dataframe.
+actuals_preds <- data.frame(cbind(actuals=y_test, predicteds=y_pred))
+
+# Computing the RMSE.
+rmse <- sqrt(mean(as.matrix(log1p(y_test) - log1p(y_pred))^2))
+print(paste('RMSE:', rmse))
+
+# MeanAbsolutePercentageError (MAPE)
+mape <- mean(abs((y_pred - y_test))/y_test)
+print(paste('MAPE:', mape))
+
+summary(actuals_preds)
+
+```
+\
+```{r Results1M2Plot, include=TRUE, echo=FALSE, fig.cap="Predict vs Actuals for Quantile Linear Reg Model Plot", fig.width=4, fig.height=4, fig.align='center'}
+#Plotting 
+plot(actuals_preds)
+```
+\
+
+This significantly improved our MAPE value, however the RMSE has increased. We shall explore other model to try achieve better results. 
+
+\newpage
+### Random Forest Model
+
+Now we will try to predict amount of students, total, over the years. this decision tree appears to be more complex than for other parameteres, however it can quite accurately predict amount of students enrolled at the university based on other factors. Interestingly, 27% of students can be determined based on choice of their Major and Level of studies. It means that this model does not account for these 27% as their sort level is very small. If the avarage Tuition Fees is less than 46e+3 and the University ID is less than 21, The rating i slikely be 3, as 28% of the universities data. 
+
+\
+
+```{r Results1M3T1, include=TRUE, echo=FALSE, fig.cap="Deicsion Tree for Student Numbers"}
+
+library(rpart) # creates decision trees
+
+tree <- rpart(Students ~ ., train)
+library(rpart.plot)  # pretty trees
+rpart.plot(tree, type=1)
+
+```
+
+\
+
+We will now apply *RandomForest* function for Students using other avaliable parameters. 
+
+```{r Results1M3rmse, include=TRUE, echo=FALSE}
+
+
+#Applying the random Forest
+rf <-randomForest(Students ~ Year+University_Name+Major+Level+Ranking+Avarage_Tuition_Fee+Curriculum_Rating+YearsinDubai ,data = train, ntree=500) 
+
+# Applying the prediction of the random Forest model on the test dataframe.
+y_pred = predict(rf, newdata = x_test)
+
+# Combining the Predicted Values and Actual Values into one dataframe.
+actuals_preds <- data.frame(cbind(actuals=y_test, predicteds=y_pred))
+
+# Computing the RMSE.
+rmse <- sqrt(mean(as.matrix(log1p(y_test) - log1p(y_pred))^2))
+print(paste('RMSE:', rmse))
+
+# MeanAbsolutePercentageError (MAPE)
+mape <- mean(abs((y_pred - y_test))/y_test)
+print(paste('MAPE',mape))
+```
+
+Both, RMSE and MAPE values have decreased. Random Forest, perhaps, is the best fit for the provided data. We will use *RandomForestExplainer* package to get to the bottom of our model. 
+
+```{r Results1M3T5E, include=TRUE, echo=FALSE, fig.cap="Decision Tree for Students"}
+
+# UNCOMMENT If would like to run on your own - warning, it takes too much time. For the sake of the project, we uploaded the outcome together with data
+# devtools::install_github("MI2DataLab/randomForestExplainer")
+#library(randomForestExplainer)
+
+#forest <- randomForest(Students ~ Year+University_Name+Major+Level+Ranking+Avarage_Tuition_Fee+Curriculum_Rating+YearsinDubai,data = train, ntree=500, localImp = TRUE)
+
+#explain_forest(forest, interactions = TRUE, data = train)
+
+```
+
+
+**Distribution of minimal depth**
+
+The plot below shows the distribution of minimal depth among the trees of our forest. Note that:
+
+- the mean of the distribution is marked by a vertical bar with a value label on it (the scale for it is different than for the rest of the plot),
+
+- the scale of the X axis goes from zero to the maximum number of trees in which any variable was used for splitting.
+
+Minimal depth for a variable in a tree equals to the depth of the node which splits on that variable and is the closest to the root of the tree. If it is low than a lot of observations are divided into groups on the basis of this variable.
+
+\
+
+```{r Results1M3T5Eshot1, include=FALSE, echo=FALSE}
+
+#Multiple Selector Based Screenshots
+webshot("Your_forest_explained.html",
+ file = c("mindepth.png"),
+ selector = list("#distribution-of-minimal-depth,img"),
+ expand = c(-150, 250, -100, -185))
+```
+
+\
+
+![Minimal Depth Distribution](mindepth.png){width=350px}
+
+\
+
+**Multi-way importance plot**
+
+The multi-way importance plot shows the relation between three measures of importance and labels 10 variables which scored best when it comes to these three measures (i.e. for which the sum of the ranks for those measures is the lowest). The first multi-way importance plot focuses on three importance measures that derive from the structure of trees in the forest:
+
+* mean depth of first split on the variable,
+* number of trees in which the root is split on the variable,
+* the total number of nodes in the forest that split on that variable.
+
+
+```{r, fig.cap="Multi-way importance plot", fig.align='center', include=FALSE}
+#Multiple Selector Based Screenshots
+webshot("Your_forest_explained.html",
+ file = c("multi.png","multi1.png"),
+ selector = list("#multi-way-importance-plot","#multi-way-importance-plot"),
+ expand = list("-235, 250, -580, -185","-800,250,0,-185"))
+```
+
+\
+
+![First Multi-way importance plot](multi.png){width=350px}
+
+\
+
+The second multi-way importance plot shows importance measures that derive from the role a variable plays in prediction: with the additional information on the p-value based on a binomial distribution of the number of nodes split on the variable assuming that variables are randomly drawn to form splits (i.e. if a variable is significant it means that the variable is used for splitting more often than would be the case if the selection was random).
+
+\
+
+![Second Multi-way importance plot](multi1.png){width=350px}
+
+\
+
+```{r Results1M3T5Eshot2, include=FALSE, echo=FALSE, fig.cap="Decision Tree for Students"}
+
+#Multiple Selector Based Screenshots
+webshot("Your_forest_explained.html",
+ file = c("compare.png"),
+ selector = list("#compare-rankings-of-variables"),
+ expand = c(-210, 350, 250, -185))
+```
+
+**Comparing rankings of variables**
+
+The plot below shows bilateral relations between the rankings of variables according to chosen importance measures. This approach might be useful as rankings are more evenly spread than corresponding importance measures. This may also more clearly show where the different measures of importance disagree or agree.
+
+\
+
+![Bilateral relations between the rankings of variable](compare.png){width=350px}
+
+```{r Results1M3T5Eshot3, include=FALSE, echo=FALSE, fig.cap="Decision Tree for Students"}
+
+#Multiple Selector Based Screenshots
+webshot("Your_forest_explained.html",
+ file = c("varint.png"),
+ selector = list("#conditional-minimal-depth"),
+ expand = c(-575, 355, -270, -185))
+```
+
+\
+
+**Variable interactions**
+
+Conditional minimal depth
+
+The plot below reports 30 top interactions according to mean of conditional minimal depth – a generalization of minimal depth that measures the depth of the second variable in a tree of which the first variable is a root (a subtree of a tree from the forest). In order to be comparable to normal minimal depth 1 is subtracted so that 0 is the minimum. For example value of 0 for interaction x:y in a tree means that if we take the highest subtree with the root splitting on x then y is used for splitting immediately after x (minimal depth of x in this subtree is 1). The values presented are means over all trees in the forest.
+
+Note that:
+- the plot shows only 30 interactions that appeared most frequently,
+- the horizontal line shows the minimal value of the depicted statistic among interactions for which it was calculated,
+- the interactions considered are ones with the following variables as first (root variables): and all possible values of the second variable.
+
+\
+
+![Variable Interactions - Conditional Minimal Depth](varint.png){width=450px}
+
+
+\
+
+
+More detailed explanation of the above graphs is also avaliable in a [complied report](Your_forest_explained.html).
+
+
+\
+
+\newpage
+
+
+
+# Google Map Reviews Analysis
+
+## Preprocessing the data
+
+#### Cleaning the data
+
+As this analysis includes Factorization model, Ensambles as well as Sentiment Analysis, the data needs to be prepared in accordance with each method. 
+
+However, there are few common steps with data manipulation which we need to perform in order to continue with the analysis.
+
+From initial data summary, we noticed that GUni and GReviews have common field of google_id which is very complex and might cause issues if not converted.
+
+Secondly, we need to get rid of columns which we will not utilize in our report. 
+
+
+We noticed, that after joining the tables through *inner_join* function, some values have dissapeared - it is simply due to the fact that in the rating dataset we have ratings for organizations, which are not considered to be universities, which we cleaned before importing the data. 
+
+```{r DataGMCleaning, include=TRUE, echo=FALSE, message=FALSE, fig.align="center"}
+
+#Selecting only fields which we need from GUni - for factorization model
+
+GFUni <- GUni %>% select(google_id,name,photos_count)
+
+#Selecting for Sentiment Analysis later in the project
+GFReviewsS <- GReviews %>% select(google_id,autor_id,review_rating,review_timestamp, review_text)
+
+#Selecting only fields which we need from GReviews - for factorization model
+GFReviews <- GReviews %>% select(google_id,autor_id,review_rating,review_timestamp)
+
+
+
+GF <- inner_join(GFReviews,GFUni)
+
+#Assigning proper IDs to google_id and autor_id
+
+setDT(GF)[, unid := .GRP, by = google_id]
+setDT(GF)[, userid := .GRP, by = autor_id]
+
+#Selecting columns which we need
+GF <- GF %>% select(unid,userid,review_rating,review_timestamp,name)
+
+#convert EPOCH time to readable format
+GF$review_timestamp <- as.POSIXct(GF$review_timestamp, origin="1970-01-01")
+
+#Factorize rating
+
+
+#Display summary of the updated data
+head(GF) %>%
+kable(caption = "First six records of GF") %>%
+  kable_styling(full_width = F, position = "center",
+                font_size = 8, latex_options = "hold_position") %>%
+   column_spec(5, bold=F, width = "25em") %>%  
+   row_spec(0, bold = T, color = "white", background = "#D7261E")
+
+
+
+
+```
+
+\
+
+We can now look at the summary of the updated data.
+```{r DataGMSummarySkim, include=TRUE, echo=FALSE, message=FALSE, fig.align="center"}
+
+#Utilizing skim package to provide sumary
+skim(GF) %>% focus(n_missing, numeric.p0, numeric.mean, numeric.sd, numeric.p100, numeric.hist) %>%
+kable(caption = "Summary of GF") %>%
+kable_styling(full_width = F, position = "center",
+                font_size = 9, latex_options = "hold_position") 
+```
+
+
+## Data Exploration 
+
+We will now explore our joined dataset GF.
+
+\
+
+```{r URatDistr, fig.width=3, fig.height=3, include=TRUE, echo=FALSE, message=FALSE, fig.align="center", fig.cap="Distribution of ratings"}
+
+# create plot to show rating distribution across values(0.5-5)
+GF  %>%
+	group_by(review_rating) %>%
+	summarize(count = n()/1000) %>%
+	ggplot(aes(x = review_rating, y = count)) +
+	geom_line() + xlab("Rating 0-5") + ylab("# Ratings, thousands") +ggtitle("Distribution of Ratings")
+
+```
+
+\
+
+It appears, there are more 5 star-reviews on google data.
+
+The distribution of ratings by univerity also show the follwoing data:
+
+\
+
+```{r UniDistr, fig.width=3, fig.height=3, include=TRUE, echo=FALSE, message=FALSE, fig.align="center", fig.cap="Distribution of ratings"}
+
+
+GF %>% 
+  count(unid) %>% 
+  ggplot(aes(n)) + 
+  geom_histogram(color = "red") +
+  ggtitle("Universities") +
+  labs(subtitle  ="number of ratings by unid", 
+       x="unid" , 
+       y="number of ratings") +
+  theme(panel.border = element_rect(colour="black", fill=NA)) 
+
+```
+
+\
+
+
+The number of ratings also not fistributed equally and varies from university to university.
+
+
+\
+
+```{r UserDistr, fig.width=3, fig.height=3, include=TRUE, echo=FALSE, message=FALSE, fig.align="center", fig.cap="Distribution of ratings"}
+
+
+GF %>% 
+  count(userid) %>% 
+  ggplot(aes(n)) + 
+  geom_histogram(color = "red") +
+  ggtitle("Users") +
+  labs(subtitle ="number of ratings by UserId", 
+       x="userId" , 
+       y="number of ratings") +
+  theme(panel.border = element_rect(colour="black", fill=NA)) 
+
+```
+
+\
+
+
+Majority of users left only one rating. 
+
+There are few who rated several organizations - could be the students who transfered from university to university or continued postgraduate studies. 
+
+\
+
+```{r MeanDistr2, fig.width=3, fig.height=3, include=TRUE, echo=FALSE, message=FALSE, fig.align="center", fig.cap="Distribution of ratings over years"}
+
+GF %>% 
+  mutate(date = round_date(as_datetime(review_timestamp), unit = "week")) %>%
+  group_by(date) %>%
+  summarize(rating = mean(review_rating)) %>%
+  ggplot(aes(date, rating)) +
+  geom_point() +
+  geom_smooth() +
+  ggtitle("Timestamp, time unit : week")+
+  labs(subtitle = "average ratings")
+```
+
+\
+
+In the past years, we can notice the distribution has shfted from 5 to somewhat above 4. 2013-2016 were years where the avarage was the highest. It might be possible to explain this observation as in the recent years, there is less interest/satisfaction in local universities. We cannot determine this as the data does not provide detailed infomration on those people who have rated the universities. 
+
+
+\
+
+```{r corrgram2, fig.width=10, fig.height=6, include=FALSE, echo=FALSE, message=FALSE, fig.align="center"}
+
+GF <- GF %>% mutate(review_year = round_date(as_datetime(review_timestamp), unit = "year"))
+
+## correlogram for GF Data saved as png to make pdf lighter:
+svglite("myPlotGF.svg")
+tmp1 <- GF %>% select(unid,userid,review_rating,review_year) %>% ggpairs(title="Correlogram for GF data with highlighted difference on time", ggplot2::aes(colour=review_year)) 
+print(tmp1)
+dev.off()
+
+## saving svg to png as screenshot
+webshot::webshot(url="myPlotGF.svg",file="myplotGF.png",vwidth=800,vheight = 800)
+
+
+```
+
+\
+
+![Correlogram for GF data with highlighted difference on time](myplotGF.png){width=500px}
+
+\
+
+Correlogram showcases how different variables are (not) correlated with each other as well as the distribution over the years. In the dates we can notice seasonality - perhpaps the time of fininshing the Fall vs Spring sessions. 
+
+
+## Data Split
+
+We will split our data into train and test sets. We will apply the following ratios for splitting the data:
+
+The final model would need to make the prediction and depending on how far off it is from the actual numbers would allow us to make a choice. We will divide into 80% and 20% as general practise in Data Science and recommendation of creaters of [dataPreparation package](https://cran.r-project.org/web/packages/dataPreparation/vignettes/train_test_prep.html).
+
+* Train set: 80%
+* Test set: 20%
+ 
+As confirmed in the EdX forum, for this project we will not be using validation set. 
+ 
+We will use dataPreparation package to help us split the data into 80/20 ratio and check for inconsistancies in the data:
+
+```{r DataGMPreparation, include=TRUE, echo=FALSE, message=FALSE, fig.align="center"}
+
+library(dataPreparation)
+
+## Arrange edx as training and test datasets as 80/20%
+set.seed(1, sample.kind="Rounding")
+
+# Random sample indexes
+train_index_GF <- sample(1:nrow(GF), 0.8 * nrow(GF))
+test_index_GF <- setdiff(1:nrow(GF), train_index_GF)
+
+# Build X_train, y_train, X_test, y_test
+X_train_GF <- GF[train_index_GF, -5]
+y_train_GF <- GF[train_index_GF, "review_rating"]
+
+X_test_GF <- GF[test_index_GF, -5]
+y_test_GF <- GF[test_index_GF, "review_rating"]
+```
+
+```{r DataGMPreparation2, include=TRUE, echo=FALSE, message=FALSE, fig.align="center"}
+
+#Identifying constant, double and bijection columns
+constant_cols <- whichAreConstant(GF)
+double_cols <- whichAreInDouble(GF)
+bijections_cols <- whichAreBijection(GF)
+
+#Removing bijection column -name
+X_train_GF$name = NULL
+X_test_GF$name = NULL
+
+```
+
+There are no constant, double columns. The bijection column name was removed from our dataset. 
+
+#### Scaling
+
+Most machine learning algorithm rather handle scaled data instead of unscaled data. To perform scaling (meaning setting mean to 0 and standard deviation to 1), function fastScale is available. Since it is highly recommended to apply same scaling on train and test, we will compute the scales first using the function *build_scales*. However, after cleaning the dataset there is no need for addditional scaling. 
+
+#### Discretization
+
+We do not have variables to perform discretization on.
+
+#### Encoding Categorical
+
+We do not have categorical data for this dataset.
+
+#### Controling shape
+
+Last, but not least, it is very important to make sure that train and test sets have the same shape (for example the same columns).
+
+To make sure of that we will perform the following function sameShape:
+
+```{r ContrShapeGM, include=TRUE, echo=FALSE, message=TRUE, fig.align="center"}
+
+ #controlling the shape
+ X_test_GF <- sameShape(X_test_GF, referenceSet = X_train_GF, verbose = TRUE)
+
+```
+
+SameShape reported that our data is in order.
+
+Now we are in possessions of 2 datasets as follows:
+
+```{r ThreeDataSetsGM, include=TRUE, echo=FALSE}
+
+ trainSet <- X_train_GF
+ testSet <- X_test_GF
+
+ text_tbl211 <- data.frame(
+   Feature = c("Number of Rows", "Number of Columns", "Unique Universities","Unique Users","Max rating"),
+   Train = c(nrow(trainSet), ncol(trainSet),n_distinct(trainSet$unid),n_distinct(trainSet$userid),n_distinct(trainSet$review_rating)), 
+   Test = c(nrow(testSet), ncol(testSet),n_distinct(testSet$unid),n_distinct(testSet$userid),n_distinct(testSet$review_rating)))
+ 
+ kable(text_tbl211) %>%
+   kable_styling(full_width = F) %>%
+   row_spec(0, bold = T, color = "white", background = "#D7261E")
+ 
+```
+
+### Data for Sentiment Analysis
+
+As Sentiment Analysis requires diferent set of avaliable data, we shall adjust our data accordingly. We will utilize similar steps as the previous analysis. We will merge data from GFUni and GFReview to a newly created GFS dataset. We will assign proper IDs for universities and users. We will change the EPOCH timestamp into readable format. We should also filter all empty reviews.
+
+
+```{r DataGMCleaningSentiment, include=TRUE, echo=FALSE, message=FALSE, fig.align="center"}
+
+#Selecting only fields which we need from GUni - for factorization model
+
+GFS <- inner_join(GFReviewsS,GFUni)
+
+#Assigning proper IDs to google_id and autor_id
+
+setDT(GFS)[, unid := .GRP, by = google_id]
+setDT(GFS)[, userid := .GRP, by = autor_id]
+
+#Selecting columns which we need
+GFS <- GFS %>% select(unid,userid,review_rating,review_timestamp,review_text)
+
+#convert EPOCH time to readable format
+GFS$review_timestamp <- as.POSIXct(GFS$review_timestamp, origin="1970-01-01")
+
+#Factorizing the rating
+GFS$review_rating <- as.factor(GFS$review_rating)
+
+GFS <- GFS %>% filter(review_text != "")
+
+#Display summary of the updated data
+head(GFS) %>%
+kable(caption = "First six records of GFS") %>%
+  kable_styling(full_width = F, position = "center",
+                font_size = 8, latex_options = "hold_position") %>%
+   column_spec(5, bold=F, width = "25em") %>%  
+   row_spec(0, bold = T, color = "white", background = "#D7261E")
+
+```
+
+\
+
+We can now look at the summary of the updated data.
+
+```{r DataGMSummarySkimSentiment, include=TRUE, echo=FALSE, message=FALSE, fig.align="center"}
+
+#Utilizing skim package to provide sumary
+skim(GFS) %>% focus(character.min,character.max,character.empty,character.n_unique,character.whitespace,numeric.hist,POSIXct.n_unique) %>%
+kable(caption = "Summary of GFS") %>%
+kable_styling(full_width = F, position = "center",
+                font_size = 9, latex_options = "hold_position") 
+```
+
+#### Data Cleaning
+
+We are ready to start preprocessing the 1689 reviews that contain text. We should further clean the data:
+* removing numbers
+* removing stopwords (words that don’t have any contextual meaning e.g. “and”, “so” etc.) 
+* Assigning to each rating a sentiment score via *syuzhet* library
+
+For our combined score we will use several lexicon libraries, sich as bing, afinn and nrc.
+
+```{r DataGMSummarySkimSentimentFilter, include=FALSE, echo=FALSE, message=FALSE, fig.align="center"}
+
+# library("wordcloud")
+# library(syuzhet)
+# library(tidytext)
+
+
+reviews <- GFS %>% select(review_text)
+colnames(reviews)[1] = "text" 
+
+
+
+review_words <- reviews %>%
+  unnest_tokens(word, text) %>%
+  filter(!word %in% stop_words$word,
+         str_detect(word, "^[a-z']+$"))
+
+
+syuzhet_vector <- get_sentiment(GFS$review_text, method="syuzhet")
+
+bing_vector <- get_sentiment(GFS$review_text, method="bing")
+afinn_vector <- get_sentiment(GFS$review_tex, method="afinn")
+nrc_vector <- get_sentiment(GFS$review_tex, method="nrc", lang = "english")
+
+rbind(sign(head(syuzhet_vector)),
+  sign(head(bing_vector)),
+  sign(head(afinn_vector)),
+  sign(head(nrc_vector)))
+
+```
+
+\
+
+The sumary of originated vector syuzhet:
+
+\
+
+```{r DataGMSummarySkimSentimentResponseSkim, include=TRUE, echo=FALSE, message=FALSE, fig.align="center"}
+
+summary(syuzhet_vector) 
+
+```
+
+The total score distribution is now ready for our analysis:
+
+```{r DataGMSummarySkimSentimentResponse, include=TRUE, echo=FALSE, message=FALSE, fig.align="center"}
+plot(
+  syuzhet_vector, 
+  type="h", 
+  main="Emotional Response of the avaliable reviews", 
+  xlab = "Review Progression", 
+  ylab= "Emotional Response"
+  )
+  
+```
+
+\newpage
+
+## Modeling Methods
+
+#### Matrix Factorization
+
+From the available literature review, we can gather that a comprehensive analysis was made to evaluate various methods for training the algorithms for recommendations. Specifically, we are referring to practical comparisons made by [Taras Hnot](https://rpubs.com/tarashnot/recommender_comparison/#algorithms-comparison), where he argues that:
+
+> There are two main categories of collaborative filtering algorithms: memory-based and model-based methods.
+
+> Memory-based methods simply memorize all ratings and make recommendations based on relation between user-item and rest of the matrix. In model-based methods predicting parametrized model firstly is needed to be fit based on rating matrix and then recommendations are issued based on fitted model.
+
+> Model-based methods, on the other hand, build parametrized models and recommend items with the highest rank, returned by model. 
+
+In his research, Taras has pointed out that "the best performance was shown by Matrix Factorization techniques with Stochastic Gradient Descend".
+
+In this project we will utilize recosystem, as it is intuitively more clear and uses simple syntax. 
+
+recosystem is an R wrapper of the [LIBMF library](http://www.csie.ntu.edu.tw/~cjlin/libmf/) developed by [Yu-Chin Juan, Yong Zhuang, Wei-Sheng Chin and Chih-Jen Lin](http://www.csie.ntu.edu.tw/~cjlin/libmf/), an open source library for recommender system using marix factorization.
+
+> The main task of recommender system is to predict unknown entries in the rating matrix based on observed values.
+> Each cell with number in it is the rating given by some user on a specific item, while those marked with question marks are unknown ratings that need to be predicted. In some other literatures, this problem may be given other names, e.g. collaborative filtering, matrix completion, matrix recovery, etc.
+> Highlights of LIBMF and recosystem
+LIBMF itself is a parallelized library, meaning that users can take advantage of multicore CPUs to speed up the computation. It also utilizes some advanced CPU features to further improve the performance. [@LIBMF]
+> recosystem is a wrapper of LIBMF, hence the features of LIBMF are all included in recosystem. Also, unlike most other R packages for statistical modeling which store the whole dataset and model object in memory, LIBMF (and hence recosystem) is much hard-disk-based, for instance the constructed model which contains information for prediction can be stored in the hard disk, and prediction result can also be directly written into a file rather than kept in memory. That is to say, recosystem will have a comparatively small memory usage.
+
+After examining the RStudio packages as an alternative to our previous model, the most intuitive and effortless solution was named as recosystem - a specified library which required minimum efforts to be executed. 
+
+#### Ensambles
+
+After examining the results of recosystem, the decision was made not to utilize  [*Ensables*](https://rafalab.github.io/dsbook/machine-learning-in-practice.html#ensembles) for our data due to limitation of variability for the choice of the rating for the university. The methods might be useless as only few users have rated more than one university.  
+
+#### WordCloud
+
+We will use wordcloud to analysie sentiments of users in our dataset.
+
+
+\newpage
+
+
+## Google Map Reviews Analysis Results
+
+### Matrix Factorization
+
+We followed the steps described in the package documentation, since it is a small dataset, the model run very fast.
+
+```{r RecosystemScript, include=TRUE, echo=FALSE}
+
+library(recosystem)
+
+ set.seed(123, sample.kind = "Rounding") # This is a randomized algorithm
+ # Convert the train and test sets into recosystem input format
+
+ train_data <-  with(trainSet, data_memory(user_index = userid,
+                                            item_index = unid,
+                                            rating     = review_rating))
+ test_data  <-  with(testSet,  data_memory(user_index = userid,
+                                            item_index = unid,
+                                            rating     = review_rating))
+
+ # Create the model object
+ r <-  recosystem::Reco()
+
+ # Select the best tuning parameters
+ opts <- r$tune(train_data, opts = list(dim = c(10, 20, 30),
+                                        lrate = c(0.1, 0.2),
+                                        costp_l2 = c(0.01, 0.1),
+                                        costq_l2 = c(0.01, 0.1),
+                                        nthread  = 4, niter = 10))
+
+  # Train the algorithm
+ r$train(train_data, opts = c(opts$min, nthread = 4, niter = 20))
+ 
+```
+
+After running the recosystem package on our trainSet, we can see the RMSE values of **0.1878**: 
+
+First 10 predicted values include: 
+
+```{r RecoSystemResults, include=TRUE, echo=FALSE}
+
+# Calculate the predicted values  
+ y_hat_reco <-  r$predict(test_data, out_memory())
+ head(y_hat_reco, 10)
+ 
+# Computing the RMSE.
+rmse <- sqrt(mean(testSet$review_rating - y_hat_reco)^2)
+print(paste('RMSE:', rmse))
+
+# MeanAbsolutePercentageError (MAPE)
+mape <- mean(abs((y_hat_reco - testSet$review_rating))/testSet$review_rating)
+print(paste('MAPE:', mape))
+
+ 
+```
+
+This is very good result, however we can notice non-integer values in the predicted values. Since the data is very spearse, it was expected, that the model will not work as efficient. 
+
+
+
+### Sentiment Analysis
+
+
+We will now combine emotional response scores with avaliable responses and present initial analysis for the same.
+
+The below plot demonstrates how each university is rated according to summarized sentiment score, over the years.  
+
+```{r DataGMSummarySkimSentimentResponse1, include=TRUE, echo=FALSE, message=FALSE, fig.align="center", fig.width=6}
+
+GFS$syuzhet <- syuzhet_vector
+
+
+GFS %>% ggplot(aes(unid,syuzhet, color=review_timestamp)) + geom_point() + geom_smooth()
+  
+```
+
+\
+
+Let's consider words in the dataset which are used more than 50 times, to understand the buzz-effect. 
+
+\
+
+```{r DataGMSummarySkimSentimentResponse2, include=TRUE, echo=FALSE, message=FALSE, fig.align="center", warning=FALSE, fig.width=8, fig.cap="Wordcloud for user reviews of universities in the UAE"}
+
+docs <- Corpus(VectorSource(GFS$review_text))
+
+dtm <- TermDocumentMatrix(docs)
+m <- as.matrix(dtm)
+v <- sort(rowSums(m),decreasing=TRUE)
+d <- data.frame(word = names(v),freq=v)
+
+
+# Convert the text to lower case
+docs <- tm_map(docs, content_transformer(tolower))
+# Remove numbers
+docs <- tm_map(docs, removeNumbers)
+# Remove english common stopwords
+docs <- tm_map(docs, removeWords, stopwords("english"))
+# Remove your own stop word
+# specify your stopwords as a character vector
+docs <- tm_map(docs, removeWords, c("Dubai", "university", "khda", "ministry", "one","education","college")) 
+# Remove punctuations
+docs <- tm_map(docs, removePunctuation)
+# Eliminate extra white spaces
+docs <- tm_map(docs, stripWhitespace)
+# Text stemming
+# docs <- tm_map(docs, stemDocument)
+
+dtm <- TermDocumentMatrix(docs)
+m <- as.matrix(dtm)
+v <- sort(rowSums(m),decreasing=TRUE)
+d <- data.frame(word = names(v),freq=v)
+
+set.seed(1234)
+wordcloud(words = d$word, freq = d$freq, min.freq = 50,
+          max.words=100, random.order=TRUE, rot.per=0.35, 
+          colors=brewer.pal(8, "Dark2"))
+
+
+```
+
+
+As anticipated, there are more possitive attributes to the wordcloud of the reviews.
+
+At the same time, it is important to note few buzz-words which universitied can take into account for their business development efforts: helpful, students, experience, quality, place, professors, people, money. 
+
+\newpage
+
+\newpage
+
+# Google Trends Forecasting
+
+## Overview and Modeling Methods
+
+#### Google Trends Overview
+
+The library *gtrendR* allows us to collect the data from Google Trends server directly. The data is collected from 2004 until date and is relative to within the category of the keyword search (i.e. 100 for keyword A means the peak of interest in search hits for keyword A itself, not the volume of performed searches). 
+
+The package has a small limitation - if we are to inquire several keywords at the same time, the library will provide information on keywords relevant to each other. This might provide addition trouble in understanding our data, hence we will import each keyword separately and join all the data in one table *google*. 
+
+Here we will jump directly to the summary of provided data.
+\
+
+```{r TrendSetup, include=TRUE, echo=FALSE, message=TRUE, fig.align="center", fig.cap="Google Trend 2004-2020 for University in Dubai, Worldwide", fig.width=6, fig.height=4}
+
+library(gtrendsR)
+library(reshape2)
+  
+#Callin all keywords, which we are interested in, separetely, as otherwise the date will become relative to keywords.
+#time=all means data collected from 2004 till date, gprop=web online web searches (no youtube etc) 
+#geo-AE means inquiries from UAE based users, otherwise - worldwide
+
+google.trends = gtrends(c("University in Dubai"), gprop = "web", time = "all")[[1]]
+google.trends = reshape2::dcast(google.trends, date ~ keyword + geo, value.var = "hits")
+colnames(google.trends)=c("date","University_world")
+setDT(google.trends)[, dateid := .GRP, by = date]
+
+google.trends2 = gtrends(c("Bachelors in Dubai"), gprop = "web", time = "all")[[1]]
+google.trends2 = reshape2::dcast(google.trends2, date ~ keyword + geo, value.var = "hits")
+colnames(google.trends2)=c("date","Bachelors_world")
+setDT(google.trends2)[, dateid := .GRP, by = date]
+
+google.trends3 = gtrends(c("Masters in Dubai"), gprop = "web", time = "all")[[1]]
+google.trends3 = reshape2::dcast(google.trends3, date ~ keyword + geo, value.var = "hits")
+colnames(google.trends3)=c("date","Masters_world")
+setDT(google.trends3)[, dateid := .GRP, by = date]
+
+google.trends4 = gtrends(c("Bachelors in Dubai"), gprop = "web", time = "all", geo = c("AE"))[[1]]
+google.trends4= reshape2::dcast(google.trends4, date ~ keyword + geo, value.var = "hits", )
+colnames(google.trends4)=c("date","Bachelors_UAE")
+setDT(google.trends4)[, dateid := .GRP, by = date]
+
+google.trends5 = gtrends(c("Masters in Dubai"), gprop = "web", time = "all", geo = c("AE"))[[1]]
+google.trends5 = reshape2::dcast(google.trends5, date ~ keyword + geo, value.var = "hits")
+colnames(google.trends5)=c("date","Masters_UAE")
+setDT(google.trends5)[, dateid := .GRP, by = date]
+
+google.trends6 = gtrends(c("Online university in Dubai"), gprop = "web", time = "all")[[1]]
+google.trends6= reshape2::dcast(google.trends6, date ~ keyword + geo, value.var = "hits", )
+colnames(google.trends6)=c("date","Online_University_world")
+setDT(google.trends6)[, dateid := .GRP, by = date]
+
+google.trends7 = gtrends(c("Online masters in Dubai"), gprop = "web", time = "all")[[1]]
+google.trends7 = reshape2::dcast(google.trends7, date ~ keyword + geo, value.var = "hits")
+colnames(google.trends7)=c("date","Online_Masters_world")
+setDT(google.trends7)[, dateid := .GRP, by = date]
+
+
+#Join the tables
+
+google <- google.trends
+  
+google <- inner_join(google,google.trends2,by="dateid")
+
+google <- inner_join(google,google.trends3,by="dateid")
+
+google <- inner_join(google,google.trends4,by="dateid")
+
+google <- inner_join(google,google.trends5,by="dateid")
+
+google <- inner_join(google,google.trends6,by="dateid")
+
+google <- inner_join(google,google.trends7,by="dateid")
+
+
+google = subset(google, select = -c(date.x,date.x.x,date.x.x.x,date.y,date.y.y,date.y.y.y,dateid))
+
+#rownames(google.trends) = google.trends$date
+#google.trends$date = NULL
+#colnames(google.trends)=c("date","University_world")
+
+
+
+#Utilizing skim package to provide sumary
+skim(google) %>% focus(n_missing,numeric.mean,numeric.sd,numeric.p0,numeric.p100,numeric.hist) %>%
+kable(caption = "Summary of google.trends for University in Dubai, Worldwide") %>%
+kable_styling(full_width = F, position = "center",
+                font_size = 7, latex_options = "hold_position") 
+
+
+
+```
+\
+
+Few important points to note: 
+
+- **University_world** stands for keyword *University in Dubai* searched *worldwide*
+- **Bachelors_world** stands for keyword *Bachelors in Dubai* searched *worldwide*
+- **Masters_world** stands for keyword *Masters in Dubai* searched *worldwide*
+- **Bachelors_UAE** stands for keyword *Bachelors in Dubai* searched in the *UAE*
+- **Masters_UAE** stands for keyword *Masters in Dubai* searched in the *UAE*
+- **Online_University_world** stands for keyword *Online University in Dubai* searched *worldwide*
+- **Online_Masters_world** stands for keyword *Online Masters in Dubai* searched *worldwide*
+- There is no data avaliable for keyword search **Online bachelors in Dubai** both in the *UAE* and *worldwide*
+
+\
+
+A more detailed view on the trends is presented below: 
+
+\
+
+
+```{r TrendUBWD, include=TRUE, echo=FALSE, message=FALSE, fig.align="center", fig.width=7, fig.height=7, fig.cap="Worldwide Trends for studies in Dubai"}
+p1 <- google %>% 
+  mutate (Smooth_UBMW=(University_world+Bachelors_world+Masters_world)/3) %>% 
+  ggplot(aes(x=date)) +
+    geom_line(aes(y=University_world, color="University_world")) +
+    geom_line(aes(y=Bachelors_world, color="Bachelors_world")) +
+    geom_line(aes(y=Masters_world, color="Masters_world")) +
+    ggtitle("Worldwide keywords search volume\n for University, Bachelors, Masters in Dubai") +
+    ylab("Trend volume") +
+    stat_smooth(aes(date, Smooth_UBMW, color="Smooth_UBMW")) + theme(legend.position="bottom")
+
+p2 <- google %>% 
+  mutate (Smooth_BMD=(Bachelors_UAE+Masters_UAE)/2) %>% 
+  ggplot(aes(x=date)) +
+   geom_line(aes(y=Bachelors_UAE, color="Bachelors_UAE")) +
+   geom_line(aes(y=Masters_UAE, color="Masters_UAE")) +
+   ggtitle("UAE-based keywords search volume for Bachelors,\nMasters in Dubai")+
+   ylab("Trend volume") +
+   stat_smooth(aes(date, Smooth_BMD, color="Smooth_BMD")) + theme(legend.position="bottom")
+
+grid.arrange(p1, p2, nrow = 2)
+
+
+```
+
+Worldwide keyword search volume presents a rather declining trend for 2015-2020 with seasonal spikes and ubnormal one-time spike for masters in Dubai in 2018. The smooth line presents avarage trend for those 3 combined searches and also declines for the past 5 years.
+
+In UAE, however, the interest for studies in Dubai appears to be more or less constant with a ligh decline from 2012. Within 15 years, the overall interest has dropped over 75%. 
+
+```{r TrendOnUBWD, include=TRUE, echo=FALSE, message=FALSE, fig.align="center", fig.width=7, fig.height=4, fig.cap="Worldwide Trends for studies in Dubai"}
+p3 <- google %>% 
+  mutate (Smooth_OUMW=(Online_University_world+Online_Masters_world)/2) %>%  
+  ggplot(aes(x=date)) +
+   geom_line(aes(y=Online_University_world, color="Online_University_world")) +
+   geom_line(aes(y=Online_Masters_world, color="Online_Masters_world")) +
+   ggtitle("Worldwide keywords search volume for Online University, Masters in Dubai")+
+   ylab("Trend volume") +
+   stat_smooth(aes(date, Smooth_OUMW, color="Smooth_OUMW")) + theme(legend.text = element_text(size=6), legend.title = element_blank(), legend.position="bottom")
+   
+grid.arrange(p3, nrow = 1)
+
+```
+
+Online studies in Dubai searched worldwide have been increasing frin 2010 to 2015, however declined thereafter. The overall interest has dropped from 2004-2005 values.
+
+We will now present correlation analysis for those values to understand if there is any connection between the interest rates. We will apply discretization of the year parameter to show the data for equal 4 years period, 5 periods as follows:
+
+```{r TrendsCorrDiscr, fig.width=20, fig.height=20, include=TRUE, echo=FALSE, message=FALSE, fig.align="center"}
+
+google$dateY <-  as.numeric(format(google$date,'%Y'))
+google <- fastDiscretization(dataSet = google, bins = list(dateY = c(2004, 2008, 2012, 2016, 2020, +Inf)))
+
+print(table(google$dateY))
+
+```
+
+\
+
+We are now ready to perform correlation analysis.
+
+\
+
+
+```{r TrendsCorr, fig.width=20, fig.height=20, include=FALSE, echo=FALSE, message=FALSE, fig.align="center"}
+
+## correlogram for Google Trends Data saved as png to make pdf lighter:
+svglite("myPlotTrends.svg", height = 20, width = 20)
+tmp3 <- google %>% select(University_world,Bachelors_world,Masters_world,Bachelors_UAE,Masters_UAE,Online_University_world,Online_Masters_world,dateY) %>% ggpairs(title="Correlogram for Google Trends data with highlighted difference on Years", ggplot2::aes(colour=dateY)) 
+print(tmp3)
+dev.off()
+
+## saving svg to png as screenshot
+webshot::webshot(url="myPlotTrends.svg",file="myplotTrends.png",vwidth=1200,vheight = 1200)
+
+
+```
+
+![Correlogram for Google Trends data with highlighted difference by Year interval](myplotTrends.png)
+
+\
+
+There is no significant correlation between the variables, apart from keyword searches for Bachelor studies in Dubai between worldwide and UAE-based numbers (0.4). This means our forecasts should be performed separetely for each keyword group. 
+
+\
+
+\
+\
+
+#### Forecasting with Holt-Winters
+
+The R package [*forecast*](https://www.r-project.org/nosvn/pandoc/forecast.html) provides methods and tools for displaying and analysing univariate time series forecasts including exponential smoothing via state space models and automatic ARIMA modelling.
+
+The additive Holt-Winters prediction function (for time series with period length p) is
+
+$$\hat Y[t+h] = a[t] + h b[t] + s[t - p + 1 + (h - 1) \bmod p],$$
+
+where $a[t]$, $b[t]$ and $s[t]$ are given by
+
+$$a[t] = \alpha (Y[t] - s[t-p])  + (1-\alpha) (a[t-1] + b[t-1])$$
+$$b[t] = \beta (a[t] -a[t-1]) + (1-\beta)  b[t-1]$$
+$$s[t] = \gamma (Y[t] - a[t])   + (1-\gamma) s[t-p]$$
+The data in x are required to be non-zero for a multiplicative model, but it makes most sense if they are all positive.
+
+The function tries to find the optimal values of $\alpha$ and/or $\beta$ and/or $\gamma$ by minimizing the squared one-step prediction error if they are NULL (the default). optimize will be used for the single-parameter case, and optim otherwise.
+ 
+We will utilize this model to predict the future trend based on the dataset.  
+
+We will check RMSE and MAPA values for one of the variables first on the train and test sets, and then apply the model for the entire data.
+
+We divided train and set data as interval between 2004-2009 for trainset and 2010 for testset. 
+
+```{r TrendsTrainTest, include=TRUE, echo=FALSE, message=FALSE, fig.align="center"}
+
+#University_world
+# Convert the data to be officially "time-series" data
+# Compute the Holt-Winters filtering for the data
+
+ga_ts_train <- ts(google$University_world, start = c(2004,01), end = c(2009,12), frequency = 12)
+ga_ts_test <- ts(google$University_world, start = c(2010,01), end = c(2011,01), frequency = 12)
+
+#Estimate model:
+
+nht.hw1 <- HoltWinters(ga_ts_train, gamma = FALSE)
+#Obtain forecasts:
+nht.forecast <- forecast(nht.hw1, h = 12)
+
+#Check accuracy:
+accuracy(nht.forecast, x = ga_ts_test)
+
+```
+
+
+Our RMSE and MAPE values have very close values in our training and test sets. In the results section we will highlight the confidence intervals in our forecasts. 
+
+
+\newpage
+
+## Google Trends Analysis Results
+
+### Forecasting with Holt-Winters
+
+As we have noticed in the discovery analysis, the trend for all searches was growing significantly for first years from 2004, but from 2015 have been reducing. 
+
+We will utilize *forecast* library build specifically to work with time-series. We will instruct the algorithm to perform forecasts for trend analysis for the next 2 years and will take into all avaliable data from 2004 onwards. 
+
+
+
+```{r CalculateTrends, include=FALSE, echo=FALSE, message=FALSE, fig.align="center"}
+
+
+#University_world
+# Convert the data to be officially "time-series" data
+ga_ts <- ts(google$University_world, start = c(2004,01), end = c(2020,05), frequency = 12)
+# Compute the Holt-Winters filtering for the data
+forecast1 <- HoltWinters(ga_ts)
+# Generate a forecast for next 24 months of the blog sessions  
+#hchart(forecast(forecast1, h = 24))  
+plotex <- hchart(forecast(forecast1, h = 24))
+htmlwidgets::saveWidget(widget = plotex, file = "plot.html")
+#setwd("~")
+webshot::webshot(url = "plot.html", 
+                 file = "plotUW.png", delay = 3, vheight = 800, vwidth = 800)
+
+#Bachelors_world
+# Convert the data to be officially "time-series" data
+ga_ts <- ts(google$Bachelors_world, start = c(2004,01), end = c(2020,05), frequency = 12)
+# Compute the Holt-Winters filtering for the data
+forecast1 <- HoltWinters(ga_ts)
+# Generate a forecast for next 24 months of the blog sessions  
+plotex <- hchart(forecast(forecast1, h = 24))
+htmlwidgets::saveWidget(widget = plotex, file = "plot.html")
+#setwd("~")
+webshot::webshot(url = "plot.html", 
+                 file = "plotBW.png", delay = 3, vheight = 800, vwidth = 800)
+
+#Masters_world
+# Convert the data to be officially "time-series" data
+ga_ts <- ts(google$Masters_world, start = c(2004,01), end = c(2020,05), frequency = 12)
+# Compute the Holt-Winters filtering for the data
+forecast1 <- HoltWinters(ga_ts)
+# Generate a forecast for next 24 months of the blog sessions  
+plotex <- hchart(forecast(forecast1, h = 24))
+htmlwidgets::saveWidget(widget = plotex, file = "plot.html")
+#setwd("~")
+webshot::webshot(url = "plot.html", 
+                 file = "plotMW.png", delay = 3, vheight = 800, vwidth = 800)
+
+#Bachelors_UAE
+# Convert the data to be officially "time-series" data
+ga_ts <- ts(google$Bachelors_UAE, start = c(2004,01), end = c(2020,05), frequency = 12)
+# Compute the Holt-Winters filtering for the data
+forecast1 <- HoltWinters(ga_ts)
+# Generate a forecast for next 24 months of the blog sessions  
+plotex <- hchart(forecast(forecast1, h = 24))
+htmlwidgets::saveWidget(widget = plotex, file = "plot.html")
+#setwd("~")
+webshot::webshot(url = "plot.html", 
+                 file = "plotBD.png", delay = 3, vheight = 800, vwidth = 800)
+
+
+#Masters_UAE
+# Convert the data to be officially "time-series" data
+ga_ts <- ts(google$Masters_UAE, start = c(2004,01), end = c(2020,05), frequency = 12)
+# Compute the Holt-Winters filtering for the data
+forecast1 <- HoltWinters(ga_ts)
+# Generate a forecast for next 24 months of the blog sessions  
+plotex <- hchart(forecast(forecast1, h = 24))
+htmlwidgets::saveWidget(widget = plotex, file = "plot.html")
+#setwd("~")
+webshot::webshot(url = "plot.html", 
+                 file = "plotMD.png", delay = 3, vheight = 800, vwidth = 800)
+
+#Online_University_world
+# Convert the data to be officially "time-series" data
+ga_ts <- ts(google$Online_University_world, start = c(2004,01), end = c(2020,05), frequency = 12)
+# Compute the Holt-Winters filtering for the data
+forecast1 <- HoltWinters(ga_ts)
+# Generate a forecast for next 24 months of the blog sessions  
+plotex <- hchart(forecast(forecast1, h = 24))
+htmlwidgets::saveWidget(widget = plotex, file = "plot.html")
+#setwd("~")
+webshot::webshot(url = "plot.html", 
+                 file = "plotOUW.png", delay = 3, vheight = 800, vwidth = 800)
+
+
+#Online_Masters_world
+# Convert the data to be officially "time-series" data
+ga_ts <- ts(google$Online_Masters_world, start = c(2004,01), end = c(2020,05), frequency = 12)
+# Compute the Holt-Winters filtering for the data
+forecast1 <- HoltWinters(ga_ts)
+# Generate a forecast for next 24 months of the blog sessions  
+plotex <- hchart(forecast(forecast1, h = 24))
+htmlwidgets::saveWidget(widget = plotex, file = "plot.html")
+#setwd("~")
+webshot::webshot(url = "plot.html", 
+                 file = "plotOMW.png", delay = 3, vheight = 800, vwidth = 800)
+
+```
+
+```{r SummariseTrends, include=FALSE, echo=FALSE, message=FALSE, fig.align="center"}
+
+summary(forecast1)
+
+```
+
+
+\
+
+![HoltWinters Forecast for University in Dubai, worldwide](plotUW.png){height=350px} 
+
+\
+
+The forecast demonstrates further significant decrease of the overall volume of searches for universities in Dubai, worldwide. 
+
+![HoltWinters Forecast for University in Dubai, worldwide](plotBW.png){height=350px}
+
+The forecast demonstrates stable interest for bachelors degrees in Dubai, worldwide. 
+
+\
+
+![HoltWinters Forecast for University in Dubai, worldwide](plotMW.png){height=350px}
+
+\
+
+The forecast demonstrates further decrease of the overall volume of searches for masters degree in Dubai, worldwide with seasonal spikes. 
+
+\
+
+![HoltWinters Forecast for University in Dubai, worldwide](plotBD.png){height=300px}
+
+
+\
+
+The forecast demonstrates further decrease of the overall volume of searches for masters degree in Dubai, in the UAE, with minimum seasonality. 
+
+\
+
+![HoltWinters Forecast for University in Dubai, worldwide](plotMD.png){height=300px}
+
+\
+
+The forecast demonstrates further insignificant decrease of the overall volume of searches for masters degree in Dubai, in the UAE, with modest seasonality. 
+
+\
+
+![HoltWinters Forecast for University in Dubai, worldwide](plotOUW.png){height=300px}
+
+\
+
+The forecast demonstrates stable interest for online universities in Dubai, worldwide. 
+
+\
+
+![HoltWinters Forecast for University in Dubai, worldwide](plotOMW.png){height=300px}
+
+\
+
+The forecast demonstrates significant increase of the overall volume of searches for online masters degree in Dubai, worldwide. 
+
+\
+
+\
+\
+
+\newpage
+\newpage
+
+# Conclusion
+
+This sections summarizes our findings for the project. We have consucted several analysis on 3 main datasets: KHDA census data, Google Reviews, Google Trends. 
+
+The aim of the first dataset was to analyse the correlation between several factors of the university data (Location, student numbers, ranking, other variables), and build a predictive model for linear regression to outline the student numbers for the future. We used Multi-linear, Quantile Regression models and Random Forest to build-up the approach. Unfortunately, due to quality of the dataset, it was not possible to construct a plug-and-play model, however we have achieved good results for RMSE and MAPE values.
+
+The second analysis was conducted on Google Review dataset and included recommendation system (similar to our previous project, but applied on Google Reviews data via recosystem), as well as simple Sentiment Analysis of the provided reviews. The evaluation of our recommendation system was also done via RMSE and MAPE, both of which reached desired values. The Sentiment Analysis was performed for exploratory purposes.
+
+The third analysis which we performed, was made on time-seried data of Google Trends from 2004 until date. The last set helped us to establish understanding where are we heading in this market considering the recent developments of COVID-19. The RMSE and MAPE was calculated for model.
+
+**Results - Summary on models**
+
+The below table records values for each algorithm used in the project, all data was divided into test and train sets prior to obtaining the final results.
+
+```{r FinalResults, include=TRUE, echo=FALSE}
+#create and display table with names of variables and comments
+final_results <- data.frame(
+  Dataset = c("Census Data","Census Data","Census Data","Google Reviews","Google Reviews","Google Trends"),
+  Algorithm = c("Multi-Linear Reg","Quantile Reg", "Random Forest", "Factorization", "Sentiment", "Holt-Winters Forecast"),
+  RMSE = c("1.58","1.51","1.22","0.09","N/A","14.8"),
+  MAPE = c("7.69","1.84","4.92","0.52","N/A","17.3"))
+
+kable(final_results, caption = "Final Project Results - Algorithms") %>%
+  kable_styling(position = "center",
+                font_size = 11,
+                full_width = FALSE, latex_options = "hold_position") %>%
+  row_spec(0, bold = T, color = "white", background = "#D7261E")
+
+```
+
+**Results - outcomes**
+
+Few very important outcomes which we have summarized for readers' convinience: 
+
+1. Collected data in the annual census is not representative to make any colclusion on the market activity. Aviability of data on higher education in Dubai is very limited and not well-maintained;
+2. Major, Tuition Fees and how old the university is comprize significant factors for overall university success. The higher the values - the more successfull university is; 
+3. Universities receive mostly possitive reviews on Google Maps; 
+4. The main buzz-words for students leaving the reviews are: helpful, students, experience, quality, place, professors, people, money;
+5. Online bachelors in Dubai, as a keyphrase, does not meet the minimum parameters as a Google Trend, both in the UAE and worldwide;
+6. The overall trend for higher education in Dubai is decreasing since 2016, for both international and local markets;
+7. COVID-19 might have insignificantly impacted on overall search volume in the last couple of months; 
+8. COVID-19 might have resulted in increase search volume for online master degrees in Dubai, both in UAE and worldwide;
+9. The forecast for international and local students volume, who express interest to study in Dubai is negative;
+10. The forecast for international and local students volume, who express interest to study online masters in Dubai is possitive. 
+
+**Limitations**
+
+This project had significant limitations summarized as follows: limited access to detailed data for university census, limited demographics offered for google reviews data. The results of this analysis should be considered as "approximated", however the build approach and models can be used to further enhance the development of the algorithms.
+
+**Further Research**
+
+It will be beneficial to expand the area of the research and improve several models presented. Specifically, obtain additional data which will present the opportunity to conduct the linear models with improved accuracy. A sentiment analysis can be improved by grouping words into groups and developing a machine learning algorithm to predict future reviews depending on the user's demographics. This insights can be critial for universities to consider while developing their strategy for successful operations.
+
+
+***
+
+\newpage
+# Appendix
+
+## List of Figurues and Tables
+\listoffigures
+\listoftables
+\newpage
+
+## Session Info
+
+```{r SessionInfo, include=TRUE, echo=FALSE}
+pander(sessionInfo(), compact=TRUE) 
+```
+
+
+*** 
+
+Interested to collaborate on this project?
+
+**Get in touch via [LinkedIn](https://www.linkedin.com/in/klimpopov/) ** or **Check for updates on the project on [GitHub](https://github.com/klim-hb/diy-project) **
+
